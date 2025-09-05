@@ -35,6 +35,7 @@
   const claimCostEl = document.getElementById("claimCost");
   const zfreeSelect = document.getElementById("zfree");
   const goToggle = document.getElementById("goToggle");
+  const shortcutsPanel = document.getElementById("shortcutsPanel");
 
   // Helpers
   const TILE_SIZE = 640; // px in world space
@@ -56,7 +57,15 @@
   // Input
   const keys = new Set();
   const mouse = { x: 0, y: 0, down: false };
-  window.addEventListener("keydown", e => keys.add(e.key.toLowerCase()));
+  window.addEventListener("keydown", e => {
+    const key = e.key.toLowerCase();
+    if (key === "tab") {
+      e.preventDefault();
+      shortcutsPanel.classList.toggle("hidden");
+    } else {
+      keys.add(key);
+    }
+  });
   window.addEventListener("keyup", e => keys.delete(e.key.toLowerCase()));
   canvas.addEventListener("mousemove", e => {
     const r = canvas.getBoundingClientRect();
@@ -87,17 +96,19 @@
     grace: 3, // seconds of protection
     zombieFreeUntil: 600, // seconds (10 minutes)
     gameOverEnabled: false,
+    occupiedBuildings: 0, // counter for buildings with 2+ animals
     domesticated: {
       list: [], // [{ type, x, y, r, wander }]
       byType: { hase: 0, kaninchen: 0, huhn: 0 },
       breedTimers: { hase: 0, kaninchen: 0, huhn: 0 }
     },
+    collectedPeople: [], // [{ x, y, r, wander, vx, vy }]
     assignCooldown: 0
   };
 
   function createPen(){ return { exists:false, assignedByType:{hase:0,kaninchen:0,huhn:0}, list:[], breedTimers:{hase:0,kaninchen:0,huhn:0}, strawTimer: 0 }; }
   function createBuildings(){
-    // 0-2 small buildings per tile, each may contain 0-3 canned food pickups
+    // 0-2 small buildings per tile, each may contain 0-3 canned food pickups and rarely NPCs
     const count = randInt(0, 2);
     const arr = [];
     for (let i=0;i<count;i++){
@@ -109,7 +120,10 @@
       for (let c=0;c<canCount;c++){
         cans.push({ x: x + rand(10, w-10), y: y + rand(10, h-10), picked:false, amount: randInt(6, 16) });
       }
-      arr.push({ x, y, w, h, cans, type: 'ruin', animals: [], foodGen: 0 });
+      // 15% chance for NPC in building
+      const hasNPC = rand() < 0.15;
+      const npc = hasNPC ? { x: x + rand(15, w-15), y: y + rand(15, h-15), collected: false } : null;
+      arr.push({ x, y, w, h, cans, type: 'ruin', animals: [], foodGen: 0, npc });
     }
     return arr;
   }
@@ -151,6 +165,16 @@
     if (!t.owned) {
       t.owned = true;
       state.ownedSet.add(keyFor(ix, iy));
+
+      // Auto-collect all non-straw resources
+      for (const resource of t.resourcePoints) {
+        if (resource.type !== 'straw') {
+          if (resource.type === 'stone') state.resources.stone += 1;
+          else if (resource.type === 'clay') state.resources.clay += 1;
+          else if (resource.type === 'wood') state.resources.wood += 1;
+        }
+      }
+
       // Add straw fields as 2x2 rectangles
       const strawSize = 40; // Size of each straw field
       const numFields = 2; // Number of 2x2 fields
@@ -232,7 +256,7 @@
     state.resources.clay -= cost.clay;
     state.resources.wood -= cost.wood;
   }
-  function getPenCost(){ return { stone:3, clay:3, wood:6 }; }
+  function getPenCost(){ return { stone:0, clay:0, wood:10 }; }
 
   // Animals
   function spawnAnimalsInTile(ix, iy) {
@@ -297,6 +321,21 @@
     state.bullets.push({ x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, r: 4, ttl: 1.1 });
   }
 
+  // Count buildings with 2+ animals
+  function countOccupiedBuildings() {
+    let count = 0;
+    for (const [k, tile] of state.tiles) {
+      if (tile.buildings) {
+        for (const building of tile.buildings) {
+          if ((building.type === 'animal_house' || building.type === 'ruin') && building.animals.length >= 2) {
+            count++;
+          }
+        }
+      }
+    }
+    return count;
+  }
+
   // HUD
   function updateHUD() {
     hudXP.textContent = `XP: ${state.xp}`;
@@ -305,6 +344,10 @@
     hudHP.textContent = `HP: ${Math.max(1, Math.ceil(state.player.hp))}`;
     hudFood.textContent = `Lebensmittel: ${Math.max(0, Math.floor(state.base.food))}`;
     hudRes.textContent = `Stein: ${Math.floor(state.resources.stone)} · Lehm: ${Math.floor(state.resources.clay)} · Holz: ${Math.floor(state.resources.wood)} · Stroh: ${Math.floor(state.resources.straw)}`;
+
+    // Update occupied buildings counter
+    state.occupiedBuildings = countOccupiedBuildings();
+    hudTiles.textContent = `Gebiete: ${state.ownedSet.size} · Gebäude: ${state.occupiedBuildings}`;
   }
 
   // Loop helpers
@@ -385,7 +428,7 @@
     if (tile.owned && !tile.pen.exists) {
       const cost = getPenCost();
       // show build hint in HUD bar
-      hudTiles.textContent = `Gebiete: ${state.ownedSet.size} · B: Stall bauen (S${cost.stone}/L${cost.clay}/H${cost.wood})`;
+      hudTiles.textContent = `Gebiete: ${state.ownedSet.size} · B: Stall bauen (H${cost.wood})`;
       if (keys.has("b") && canAfford(cost)) { payCost(cost); tile.pen.exists = true; updateHUD(); }
     }
     
@@ -393,11 +436,32 @@
     if (tile.owned && keys.has("v")) {
       const buildingCost = {stone: 2, clay: 2, wood: 4};
       if (canAfford(buildingCost)) {
-        payCost(buildingCost);
         const w = 80, h = 80;
         const x = rand(40, TILE_SIZE-w-40), y = rand(40, TILE_SIZE-h-40);
-        tile.buildings.push({x, y, w, h, cans: [], type: 'animal_house', animals: [], foodGen: 0});
-        updateHUD();
+
+        // Check for collision with existing buildings
+        let collision = false;
+        for (const existing of tile.buildings) {
+          if (x < existing.x + existing.w && x + w > existing.x &&
+              y < existing.y + existing.h && y + h > existing.y) {
+            collision = true;
+            break;
+          }
+        }
+
+        // Check for collision with pen (if exists)
+        if (tile.pen?.exists) {
+          const penX = HALF_TILE - 10, penY = HALF_TILE - 10, penW = 20, penH = 20;
+          if (x < penX + penW && x + w > penX && y < penY + penH && y + h > penY) {
+            collision = true;
+          }
+        }
+
+        if (!collision) {
+          payCost(buildingCost);
+          tile.buildings.push({x, y, w, h, cans: [], type: 'animal_house', animals: [], foodGen: 0});
+          updateHUD();
+        }
       }
     }
 
@@ -427,18 +491,42 @@
             }
           }
         }
-        
-        // Assign animals to building with H key
+
+        // Collect NPCs with P key
+        if (b.npc && !b.npc.collected) {
+          const npcWorldX = tileOrigin(pt.ix, pt.iy).x + b.npc.x;
+          const npcWorldY = tileOrigin(pt.ix, pt.iy).y + b.npc.y;
+          if (len(npcWorldX - p.x, npcWorldY - p.y) <= 24) {
+            if (keys.has("p")) {
+              b.npc.collected = true;
+              // Add to collected people - place near base
+              const baseTileOrigin = tileOrigin(state.base.ix, state.base.iy);
+              const npcX = baseTileOrigin.x + HALF_TILE + rand(-HALF_TILE+40, HALF_TILE-40);
+              const npcY = baseTileOrigin.y + HALF_TILE + rand(-HALF_TILE+40, HALF_TILE-40);
+              state.collectedPeople.push({ x: npcX, y: npcY, r: 12, wander: 0, vx: 0, vy: 0 });
+              updateHUD();
+            }
+          }
+        }
+
+        // Assign animals to building with H key - now works across all owned tiles
         if ((b.type === 'animal_house' || b.type === 'ruin') && keys.has('h') && b.animals.length < 2) {
-          // Find a domesticated animal to assign
+          // Find the closest domesticated animal
+          let closestAnimal = null;
+          let closestDistance = Infinity;
           for (let i = state.domesticated.list.length - 1; i >= 0; i--) {
             const animal = state.domesticated.list[i];
-            if (len(animal.x - p.x, animal.y - p.y) <= 30) {
-              state.domesticated.list.splice(i, 1);
-              state.domesticated.byType[animal.type] = Math.max(0, (state.domesticated.byType[animal.type] || 1) - 1);
-              b.animals.push({type: animal.type, x: rand(0.2, 0.8), y: rand(0.2, 0.8), wander: 0, vx: 0, vy: 0});
-              break;
+            const distance = len(animal.x - p.x, animal.y - p.y);
+            if (distance < closestDistance) {
+              closestDistance = distance;
+              closestAnimal = { index: i, animal: animal };
             }
+          }
+
+          if (closestAnimal) {
+            const animal = state.domesticated.list.splice(closestAnimal.index, 1)[0];
+            state.domesticated.byType[animal.type] = Math.max(0, (state.domesticated.byType[animal.type] || 1) - 1);
+            b.animals.push({type: animal.type, x: rand(0.2, 0.8), y: rand(0.2, 0.8), wander: 0, vx: 0, vy: 0});
           }
         }
       }
@@ -511,25 +599,70 @@
   }
 
   function updateDomesticated(dt) {
-    // roam across all owned tiles - keep them inside the owned perimeter
-    for(const d of state.domesticated.list){ 
-      d.wander -= dt; 
-      if(d.wander<=0){ 
-        d.wander = rand(1.0, 2.5); 
-        d.vx = rand(-30,30); 
-        d.vy = rand(-30,30); 
-      } 
+    // roam across all owned tiles - keep them inside the owned perimeter and prevent entering buildings
+    for(const d of state.domesticated.list){
+      d.wander -= dt;
+      if(d.wander<=0){
+        d.wander = rand(1.0, 2.5);
+        d.vx = rand(-30,30);
+        d.vy = rand(-30,30);
+      }
       const oldX = d.x, oldY = d.y;
-      d.x += (d.vx||0) * dt; 
-      d.y += (d.vy||0) * dt; 
-      
-      // Better boundary check - if outside owned area, push back and change direction
-      if (!isWithinOwnedTiles(d.x,d.y)) { 
+      const newX = d.x + (d.vx||0) * dt;
+      const newY = d.y + (d.vy||0) * dt;
+
+      // Check for building collisions in the current tile
+      const animalTile = worldToTile(newX, newY);
+      const tileKey = keyFor(animalTile.ix, animalTile.iy);
+      const tile = state.tiles.get(tileKey);
+
+      let buildingCollision = false;
+      if (tile && tile.buildings) {
+        for (const building of tile.buildings) {
+          // Convert building position to world coordinates
+          const buildingWorldX = tileOrigin(animalTile.ix, animalTile.iy).x + building.x;
+          const buildingWorldY = tileOrigin(animalTile.ix, animalTile.iy).y + building.y;
+
+          // Check collision with building
+          if (newX + d.r > buildingWorldX && newX - d.r < buildingWorldX + building.w &&
+              newY + d.r > buildingWorldY && newY - d.r < buildingWorldY + building.h) {
+            buildingCollision = true;
+            break;
+          }
+        }
+      }
+
+      // Check for pen collision
+      let penCollision = false;
+      if (tile && tile.pen?.exists) {
+        const penX = tileOrigin(animalTile.ix, animalTile.iy).x + HALF_TILE - 10;
+        const penY = tileOrigin(animalTile.ix, animalTile.iy).y + HALF_TILE - 10;
+        const penW = 20, penH = 20;
+
+        if (newX + d.r > penX && newX - d.r < penX + penW &&
+            newY + d.r > penY && newY - d.r < penY + penH) {
+          penCollision = true;
+        }
+      }
+
+      // Apply movement only if no collision
+      if (!buildingCollision && !penCollision) {
+        d.x = newX;
+        d.y = newY;
+      } else {
+        // Bounce away from obstacle
+        d.wander = 0.2;
+        d.vx = -d.vx;
+        d.vy = -d.vy;
+      }
+
+      // Boundary check - if outside owned area, push back and change direction
+      if (!isWithinOwnedTiles(d.x,d.y)) {
         // Find the nearest owned tile and push animal back
         const animalTile = worldToTile(d.x, d.y);
         let nearestOwnedTile = null;
         let minDistance = Infinity;
-        
+
         for (const ownedKey of state.ownedSet) {
           const [ix, iy] = ownedKey.split(",").map(Number);
           const distance = Math.abs(ix - animalTile.ix) + Math.abs(iy - animalTile.iy);
@@ -538,7 +671,7 @@
             nearestOwnedTile = {ix, iy};
           }
         }
-        
+
         if (nearestOwnedTile) {
           const org = tileOrigin(nearestOwnedTile.ix, nearestOwnedTile.iy);
           d.x = clamp(d.x, org.x + 20, org.x + TILE_SIZE - 20);
@@ -547,7 +680,7 @@
           d.x = oldX;
           d.y = oldY;
         }
-        
+
         d.wander = 0.2;
         // Change direction to move away from boundary
         d.vx = -d.vx;
@@ -627,20 +760,21 @@
             animal.y = clamp(animal.y + (animal.vy || 0) * dt, 0.1, 0.9);
           }
 
-          // Food generation
-          const byType = {hase:0, kaninchen:0, huhn:0};
-          for (const animal of building.animals) {
-            byType[animal.type] = (byType[animal.type] || 0) + 1;
-          }
-          for (const type of ['hase', 'kaninchen', 'huhn']) {
-            if (byType[type] >= 2) {
-              building.foodGen += dt * 0.008; // Adjust for 2 min
-              if (building.foodGen >= 1) {
-                building.foodGen = 0;
-                state.base.food += 1;
+          // Straw consumption and food generation for buildings with 2+ animals
+          if (building.animals.length >= 2) {
+            // Straw consumption every 10 minutes
+            building.strawTimer = (building.strawTimer || 0) + dt;
+            if (building.strawTimer >= 600) {
+              building.strawTimer = 0;
+              if (state.resources.straw >= 1) {
+                state.resources.straw -= 1;
+                // Produce 2 food per straw consumed
+                state.base.food += 2;
                 updateHUD();
               }
             }
+          } else {
+            building.strawTimer = 0;
           }
         }
       }

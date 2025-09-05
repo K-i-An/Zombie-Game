@@ -18,13 +18,34 @@
 
   <div id="claimPrompt" class="hidden">E drücken: Gebiet beanspruchen (Kosten: <span id="claimCost"></span>)</div>
 
+  <div id="shortcutsPanel" class="hidden">
+    <div id="shortcutsToggle">Tab: Shortcuts ausblenden</div>
+    <div class="shortcut-group">
+      <div class="shortcut-item"><span class="key">WASD</span> Bewegen</div>
+      <div class="shortcut-item"><span class="key">Maus</span> Zielen/Schießen</div>
+      <div class="shortcut-item"><span class="key">E</span> Gebiet beanspruchen</div>
+      <div class="shortcut-item"><span class="key">F</span> Tier fangen</div>
+      <div class="shortcut-item"><span class="key">P</span> Person sammeln</div>
+    </div>
+    <div class="shortcut-group">
+      <div class="shortcut-item"><span class="key">B</span> Stall bauen (10 Holz)</div>
+      <div class="shortcut-item"><span class="key">G</span> Tier zu Stall</div>
+      <div class="shortcut-item"><span class="key">V</span> Tiergebäude bauen</div>
+      <div class="shortcut-item"><span class="key">H</span> Tier zu Gebäude</div>
+    </div>
+    <div class="shortcut-group">
+      <div class="shortcut-item"><span class="key">R</span> Neustart</div>
+      <div class="shortcut-item"><span class="key">Tab</span> Shortcuts umschalten</div>
+    </div>
+  </div>
+
   <canvas id="game"></canvas>
 
   <canvas id="minimap" width="200" height="200"></canvas>
 
   <div id="overlay" class="">
     <h1 id="title">Base Build Zombie</h1>
-    <p id="subtitle">WASD/Arrows: Bewegen · Maus: Zielen/Schießen · E: Gebiet beanspruchen · F: Tier fangen · B: Stall bauen · G: Tier zu Stall · V: Tiergebäude bauen · H: Tier zu Gebäude · R: Neustart</p>
+    <p id="subtitle">WASD/Arrows: Bewegen · Maus: Zielen/Schießen · E: Gebiet beanspruchen · F: Tier fangen · P: Person sammeln · B: Stall bauen (10 Holz) · G: Tier zu Stall · V: Tiergebäude bauen · H: Tier zu Gebäude · Tab: Shortcuts · R: Neustart</p>
     <div style="display:flex; gap:12px; align-items:center; margin: 8px 0 8px;">
       <label for="zfree">Zombie-freie Zeit (Minuten):</label>
       <select id="zfree">

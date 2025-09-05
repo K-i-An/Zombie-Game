@@ -17,11 +17,13 @@ Ein 2D-Survival-Spiel mit Tile-basierter Welt, Ressourcen-Management und Zombie-
 
 ### Aktionen
 - **F** - Wilde Tiere fangen (in der Nähe)
+- **P** - Überlebende sammeln (in Gebäuden)
 - **E** - Angrenzendes Tile erobern (wenn genug Ressourcen)
-- **B** - Stall bauen (auf besetztem Tile)
+- **B** - Stall bauen (auf besetztem Tile, kostet 10 Holz)
 - **G** - Tiere in Stall einteilen (bei Stall + domestizierte Tiere)
 - **V** - Tiergebäude bauen (auf besetztem Tile)
 - **H** - Tiere in Gebäude einteilen (bei Gebäude + domestizierte Tiere)
+- **Tab** - Shortcuts-Panel ein-/ausblenden
 
 ### UI
 - **Start Button** - Spiel starten
@@ -45,15 +47,17 @@ Ein 2D-Survival-Spiel mit Tile-basierter Welt, Ressourcen-Management und Zombie-
 ## Gebäude
 
 ### Ställe (B-Taste)
-- **Kosten**: 3 Stein, 3 Lehm, 6 Holz
+- **Kosten**: 10 Holz
 - **Funktion**: Tiere können hier gezüchtet werden
 - **Tiere einteilen**: Mit **G** domestizierte Tiere in Stall bringen
 
-### Tiergebäude (V-Taste)  
+### Tiergebäude (V-Taste)
 - **Kosten**: 2 Stein, 2 Lehm, 4 Holz
 - **Funktion**: Bis zu 2 Tiere können hier gehalten werden
 - **Nahrungsgenerierung**: 2+ gleiche Tiere produzieren langsam Nahrung
 - **Tiere einteilen**: Mit **H** domestizierte Tiere in Gebäude bringen
+- **Stroh-Verbrauch**: Gebäude mit 2+ Tieren verbrauchen Stroh (alle 10 Minuten)
+- **Nahrung aus Stroh**: Jedes verbrauchte Stroh produziert 2 Nahrung
 
 ## Tiere
 
@@ -67,6 +71,20 @@ Ein 2D-Survival-Spiel mit Tile-basierter Welt, Ressourcen-Management und Zombie-
 - **Bewegung**: Frei in deinem gesamten besetzten Gebiet
 - **Schutz**: Sicher vor Zombies in deinem Territorium
 - **Zucht**: In Ställen und Gebäuden möglich
+
+## Überlebende (NPCs)
+
+### Sammeln
+- **Spawn**: Selten in Ruinen-Gebäuden (15% Chance)
+- **Sammeln**: Mit **P** in der Nähe eines Gebäudes
+- **Erscheinung**: Hellhäutige Kreise in Gebäuden
+
+### Basis-Integration
+- **Bewegung**: Langsam wandernd in deinem Territorium
+- **Nahrung**: Verbrauchen 0.3 Nahrung pro Sekunde
+- **Ressourcen**: Sammeln automatisch Ressourcen in der Nähe
+- **Schutz**: Bleiben innerhalb deines Territoriums
+- **Hindernisse**: Vermeiden Gebäude und Ställe
 
 ## Zombies
 
@@ -113,5 +131,3 @@ Ein 2D-Survival-Spiel mit Tile-basierter Welt, Ressourcen-Management und Zombie-
 - **Restart**: Mit dem Restart-Button neu starten
 
 Viel Erfolg beim Überleben! 🧟‍♂️🏰
-
-
