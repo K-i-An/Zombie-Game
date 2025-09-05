@@ -97,6 +97,13 @@
     zombieFreeUntil: 600, // seconds (10 minutes)
     gameOverEnabled: false,
     occupiedBuildings: 0, // counter for buildings with 2+ animals
+    totalVillagers: 0, // counter for villagers in ruins
+    maxVillagerSlots: 0, // max slots for villagers
+    isDay: true, // day/night cycle
+    dayLength: 86400, // 24 hours in seconds
+    dayDuration: 64800, // 18 hours in seconds
+    nightDuration: 21600, // 6 hours in seconds
+    currentTimeOfDay: 0, // current time in cycle (0-86399)
     domesticated: {
       list: [], // [{ type, x, y, r, wander }]
       byType: { hase: 0, kaninchen: 0, huhn: 0 },
@@ -345,9 +352,11 @@
     hudFood.textContent = `Lebensmittel: ${Math.max(0, Math.floor(state.base.food))}`;
     hudRes.textContent = `Stein: ${Math.floor(state.resources.stone)} · Lehm: ${Math.floor(state.resources.clay)} · Holz: ${Math.floor(state.resources.wood)} · Stroh: ${Math.floor(state.resources.straw)}`;
 
-    // Update occupied buildings counter
+    // Update occupied buildings counter and time display
     state.occupiedBuildings = countOccupiedBuildings();
-    hudTiles.textContent = `Gebiete: ${state.ownedSet.size} · Gebäude: ${state.occupiedBuildings}`;
+    const currentHour = Math.floor(state.currentTimeOfDay / 3600);
+    const timeString = `${currentHour.toString().padStart(2, '0')}:00 ${state.isDay ? 'Tag' : 'Nacht'}`;
+    hudTiles.textContent = `Gebiete: ${state.ownedSet.size} · Gebäude: ${state.occupiedBuildings} · ${timeString}`;
   }
 
   // Loop helpers
@@ -940,11 +949,12 @@
   function renderMinimap() {
     // Setup and clear
     mctx.clearRect(0,0,minimap.width,minimap.height);
-    // Define scale: show 9x9 tiles around base
+    // Define scale: show 9x9 tiles around player
     const tilesSpan = 9; // tiles edge
     const tilePx = Math.floor(minimap.width / tilesSpan);
     const half = Math.floor(tilesSpan / 2);
-    const bx = state.base.ix, by = state.base.iy;
+    const pt = worldToTile(state.player.x, state.player.y);
+    const bx = pt.ix, by = pt.iy;
 
     for (let ty = by - half; ty <= by + half; ty++) {
       for (let tx = bx - half; tx <= bx + half; tx++) {
@@ -956,11 +966,16 @@
         else if (t.revealed) mctx.fillStyle = "#394b6a";
         else mctx.fillStyle = "#1a1c2a";
         mctx.fillRect(mx, my, tilePx-1, tilePx-1);
+
+        // Draw buildings
+        if (t.buildings && t.buildings.length > 0) {
+          mctx.fillStyle = "#666666";
+          mctx.fillRect(mx + 2, my + 2, tilePx - 4, tilePx - 4);
+        }
       }
     }
 
     // Player dot
-    const pt = worldToTile(state.player.x, state.player.y);
     const px = (pt.ix - (bx - half)) * tilePx + tilePx/2;
     const py = (pt.iy - (by - half)) * tilePx + tilePx/2;
     mctx.fillStyle = "#8be9fd";
@@ -968,11 +983,34 @@
     mctx.arc(px, py, Math.max(2, tilePx*0.15), 0, Math.PI*2);
     mctx.fill();
 
-    // Base square
-    const bxp = (bx - (bx - half)) * tilePx + tilePx/2;
-    const byp = (by - (by - half)) * tilePx + tilePx/2;
-    mctx.fillStyle = "#9ad4ff";
-    mctx.fillRect(bxp - tilePx*0.2, byp - tilePx*0.2, tilePx*0.4, tilePx*0.4);
+    // Arrow to base
+    const baseDx = state.base.ix - pt.ix;
+    const baseDy = state.base.iy - pt.iy;
+    if (baseDx !== 0 || baseDy !== 0) {
+      const dist = Math.sqrt(baseDx * baseDx + baseDy * baseDy);
+      const dirX = baseDx / dist;
+      const dirY = baseDy / dist;
+      const arrowLength = tilePx * 0.8;
+      const arrowEndX = px + dirX * arrowLength;
+      const arrowEndY = py + dirY * arrowLength;
+
+      mctx.strokeStyle = "#9ad4ff";
+      mctx.lineWidth = 2;
+      mctx.beginPath();
+      mctx.moveTo(px, py);
+      mctx.lineTo(arrowEndX, arrowEndY);
+      mctx.stroke();
+
+      // Arrowhead
+      const headSize = 4;
+      const angle = Math.atan2(dirY, dirX);
+      mctx.beginPath();
+      mctx.moveTo(arrowEndX, arrowEndY);
+      mctx.lineTo(arrowEndX - headSize * Math.cos(angle - Math.PI/6), arrowEndY - headSize * Math.sin(angle - Math.PI/6));
+      mctx.moveTo(arrowEndX, arrowEndY);
+      mctx.lineTo(arrowEndX - headSize * Math.cos(angle + Math.PI/6), arrowEndY - headSize * Math.sin(angle + Math.PI/6));
+      mctx.stroke();
+    }
   }
 
   function renderFence(){
@@ -997,6 +1035,13 @@
 
   function render() {
     ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+
+    // Day/night background effect
+    if (!state.isDay) {
+      // Night time - darker overlay
+      ctx.fillStyle = "rgba(0, 0, 20, 0.4)";
+      ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+    }
 
     // draw visible tiles 3x3 around player
     const p = state.player;
@@ -1184,6 +1229,16 @@
     }
   }
 
+  function updateDayNightCycle(dt) {
+    // Update current time in cycle
+    state.currentTimeOfDay = (state.elapsed % state.dayLength);
+
+    // Determine if it's day or night
+    // Day: 0 to dayDuration (18 hours)
+    // Night: dayDuration to dayLength (6 hours)
+    state.isDay = state.currentTimeOfDay < state.dayDuration;
+  }
+
   function updateWildAnimals(dt) {
     for (const a of state.animals) {
       if (!a.alive || !a.wild) continue;
@@ -1218,6 +1273,7 @@
     if(state.grace>0) state.grace = Math.max(0, state.grace - dt);
 
     updatePlayer(dt);
+    updateDayNightCycle(dt);
     updateWildAnimals(dt);
     updateBullets(dt);
     updateZombies(dt);
