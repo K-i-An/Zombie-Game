@@ -100,9 +100,9 @@
     totalVillagers: 0, // counter for villagers in ruins
     maxVillagerSlots: 0, // max slots for villagers
     isDay: true, // day/night cycle
-    dayLength: 86400, // 24 hours in seconds
-    dayDuration: 64800, // 18 hours in seconds
-    nightDuration: 21600, // 6 hours in seconds
+    dayLength: 720, // 12 minutes real time for 24 hours game time
+    dayDuration: 540, // 9 minutes real time for 18 hours game time
+    nightDuration: 180, // 3 minutes real time for 6 hours game time
     currentTimeOfDay: 0, // current time in cycle (0-86399)
     daysPassed: 0, // total days elapsed since game start
     domesticated: {
@@ -356,8 +356,9 @@
 
     // Update occupied buildings counter and time display
     state.occupiedBuildings = countOccupiedBuildings();
-    const totalHours = Math.floor(state.elapsed / 3600);
-    const totalMinutes = Math.floor((state.elapsed % 3600) / 60);
+    const scaledElapsed = state.elapsed * 120;
+    const totalHours = Math.floor((scaledElapsed % 86400) / 3600);
+    const totalMinutes = Math.floor((scaledElapsed % 3600) / 60);
     const timeString = `${totalHours.toString().padStart(2, '0')}:${totalMinutes.toString().padStart(2, '0')}`;
     const dayString = `Tag ${state.daysPassed + 1}`;
     hudTiles.textContent = `Gebiete: ${state.ownedSet.size} · Gebäude: ${state.occupiedBuildings} · ${dayString}, ${timeString}`;
