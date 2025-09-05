@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Base Build Zombie</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="hud">
+    <div id="score">XP: 0</div>
+    <div id="level">Level: 1</div>
+    <div id="tiles">Gebiete: 1</div>
+    <div id="health">HP: 100</div>
+    <div id="food">Lebensmittel: 100</div>
+    <div id="res">Stein: 0 · Lehm: 0 · Holz: 0</div>
+  </div>
+
+  <div id="claimPrompt" class="hidden">E drücken: Gebiet beanspruchen (Kosten: <span id="claimCost"></span>)</div>
+
+  <canvas id="game"></canvas>
+
+  <canvas id="minimap" width="200" height="200"></canvas>
+
+  <div id="overlay" class="">
+    <h1 id="title">Base Build Zombie</h1>
+    <p id="subtitle">WASD/Arrows: Bewegen · Maus: Zielen/Schießen · E: Gebiet · F: Fangen · R: Neustart</p>
+    <div style="display:flex; gap:12px; align-items:center; margin: 8px 0 8px;">
+      <label for="zfree">Zombie-freie Zeit (Minuten):</label>
+      <select id="zfree">
+        <option value="0">0</option>
+        <option value="300">5</option>
+        <option value="600" selected>10</option>
+        <option value="1200">20</option>
+      </select>
+    </div>
+    <div style="display:flex; gap:8px; align-items:center; margin: 0 0 16px;">
+      <input id="goToggle" type="checkbox" />
+      <label for="goToggle">Game Over aktivieren</label>
+    </div>
+    <button id="startBtn" type="button">Start</button>
+  </div>
+
+  <div id="gameover" class="hidden">
+    <h1>Game Over</h1>
+    <p id="finalScore">XP: 0</p>
+    <button id="restartBtn" type="button">Nochmal</button>
+  </div>
+
+  <script src="main.js"></script>
+</body>
+</html>
