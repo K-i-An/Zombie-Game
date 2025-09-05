@@ -48,6 +48,11 @@
   function rand(min, max) { return Math.random() * (max - min) + min; }
   function randInt(min, max) { return Math.floor(rand(min, max)); }
 
+  // Calculate max HP based on level
+  function calculateMaxHP(level) {
+    return 100 + (level - 1) * 10;
+  }
+
   // Input
   const keys = new Set();
   const mouse = { x: 0, y: 0, down: false };
@@ -67,7 +72,7 @@
     timePrev: 0,
     elapsed: 0,
     camera: { x: 0, y: 0 },
-    player: { x: 0, y: 0, r: 14, hp: 100, speed: 220, fireCd: 0 },
+    player: { x: 0, y: 0, r: 14, hp: 100, maxHP: 100, speed: 220, fireCd: 0 },
     bullets: [],
     zombies: [],
     animals: [],
@@ -75,7 +80,7 @@
     ownedSet: new Set(),
     revealedSet: new Set(),
     base: { ix: 0, iy: 0, food: 100, foodRate: 0.5 },
-    resources: { stone: 0, clay: 0, wood: 0 },
+    resources: { stone: 0, clay: 0, wood: 0, straw: 0 },
     xp: 0,
     level: 1,
     spawnTimer: 0,
@@ -90,7 +95,7 @@
     assignCooldown: 0
   };
 
-  function createPen(){ return { exists:false, assignedByType:{hase:0,kaninchen:0,huhn:0}, list:[], breedTimers:{hase:0,kaninchen:0,huhn:0} }; }
+  function createPen(){ return { exists:false, assignedByType:{hase:0,kaninchen:0,huhn:0}, list:[], breedTimers:{hase:0,kaninchen:0,huhn:0}, strawTimer: 0 }; }
   function createBuildings(){
     // 0-2 small buildings per tile, each may contain 0-3 canned food pickups
     const count = randInt(0, 2);
@@ -146,6 +151,24 @@
     if (!t.owned) {
       t.owned = true;
       state.ownedSet.add(keyFor(ix, iy));
+      // Add straw fields as 2x2 rectangles
+      const strawSize = 40; // Size of each straw field
+      const numFields = 2; // Number of 2x2 fields
+      for (let i = 0; i < numFields; i++) {
+        const baseX = rand(50, TILE_SIZE - 50 - strawSize);
+        const baseY = rand(50, TILE_SIZE - 50 - strawSize);
+        // Create 2x2 grid of straw points
+        for (let dx = 0; dx < 2; dx++) {
+          for (let dy = 0; dy < 2; dy++) {
+            t.resourcePoints.push({
+              type: 'straw',
+              x: baseX + dx * strawSize,
+              y: baseY + dy * strawSize,
+              respawnTimer: 0
+            });
+          }
+        }
+      }
     }
   }
 
@@ -160,6 +183,7 @@
     state.player.x = HALF_TILE;
     state.player.y = HALF_TILE;
     state.player.hp = 100;
+    state.player.maxHP = 100;
     state.player.fireCd = 0;
     state.bullets.length = 0;
     state.zombies.length = 0;
@@ -168,7 +192,7 @@
     state.ownedSet.clear();
     state.revealedSet.clear();
     state.base = { ix: 0, iy: 0, food: 100, foodRate: 0.5 };
-    state.resources = { stone: 0, clay: 0, wood: 0 };
+    state.resources = { stone: 0, clay: 0, wood: 0, straw: 0 };
     state.xp = 0;
     state.level = 1;
     state.spawnTimer = 0;
@@ -280,7 +304,7 @@
     hudTiles.textContent = `Gebiete: ${state.ownedSet.size}`;
     hudHP.textContent = `HP: ${Math.max(1, Math.ceil(state.player.hp))}`;
     hudFood.textContent = `Lebensmittel: ${Math.max(0, Math.floor(state.base.food))}`;
-    hudRes.textContent = `Stein: ${Math.floor(state.resources.stone)} · Lehm: ${Math.floor(state.resources.clay)} · Holz: ${Math.floor(state.resources.wood)}`;
+    hudRes.textContent = `Stein: ${Math.floor(state.resources.stone)} · Lehm: ${Math.floor(state.resources.clay)} · Holz: ${Math.floor(state.resources.wood)} · Stroh: ${Math.floor(state.resources.straw)}`;
   }
 
   // Loop helpers
@@ -331,9 +355,10 @@
             if (resource.type === 'stone') state.resources.stone += 1;
             else if (resource.type === 'clay') state.resources.clay += 1;
             else if (resource.type === 'wood') state.resources.wood += 1;
-            
-            // Set respawn timer (30 seconds)
-            resource.respawnTimer = 30;
+            else if (resource.type === 'straw') state.resources.straw += 1;
+
+            // Set respawn timer (30 seconds for stone/clay/wood, 180 for straw)
+            resource.respawnTimer = resource.type === 'straw' ? 180 : 30;
             updateHUD();
           }
         }
@@ -404,14 +429,14 @@
         }
         
         // Assign animals to building with H key
-        if (b.type === 'animal_house' && keys.has('h') && b.animals.length < 2) {
+        if ((b.type === 'animal_house' || b.type === 'ruin') && keys.has('h') && b.animals.length < 2) {
           // Find a domesticated animal to assign
           for (let i = state.domesticated.list.length - 1; i >= 0; i--) {
             const animal = state.domesticated.list[i];
             if (len(animal.x - p.x, animal.y - p.y) <= 30) {
               state.domesticated.list.splice(i, 1);
               state.domesticated.byType[animal.type] = Math.max(0, (state.domesticated.byType[animal.type] || 1) - 1);
-              b.animals.push({type: animal.type, x: rand(0.2, 0.8), y: rand(0.2, 0.8)});
+              b.animals.push({type: animal.type, x: rand(0.2, 0.8), y: rand(0.2, 0.8), wander: 0, vx: 0, vy: 0});
               break;
             }
           }
@@ -433,6 +458,16 @@
         const cx = center.x + HALF_TILE;
         const cy = center.y + HALF_TILE;
         if (len(state.player.x - cx, state.player.y - cy) < HALF_TILE + 40) {
+          // Check for zombies in the tile and neighbors
+          const checkTiles = [n, ...neighbors(n.ix, n.iy)];
+          for (const check of checkTiles) {
+            for (const z of state.zombies) {
+              const zt = worldToTile(z.x, z.y);
+              if (zt.ix === check.ix && zt.iy === check.iy) {
+                return null;
+              }
+            }
+          }
           return n;
         }
       }
@@ -561,22 +596,45 @@
           }
         } else { pen.breedTimers[ty] = 0; }
       }
+
+      // Straw consumption every 10 min
+      pen.strawTimer = (pen.strawTimer || 0) + dt;
+      if (pen.strawTimer >= 600) {
+        pen.strawTimer = 0;
+        const total = pen.list.length;
+        if (state.resources.straw >= total) {
+          state.resources.straw -= total;
+        } else {
+          // no food, reduce foodRate
+          state.base.foodRate = Math.max(0.1, state.base.foodRate - 0.1);
+        }
+      }
     }
     
-    // Update animal buildings
+    // Update animal buildings movement and food
     for (const [k, tile] of state.tiles) {
       for (const building of tile.buildings) {
-        if (building.type === 'animal_house') {
-          // Count animals by type in this building
+        if (building.type === 'animal_house' || building.type === 'ruin') {
+          // Movement
+          for (const animal of building.animals) {
+            animal.wander = (animal.wander || 0) - dt;
+            if (animal.wander <= 0) {
+              animal.wander = rand(1.0, 2.0);
+              animal.vx = rand(-0.1, 0.1);
+              animal.vy = rand(-0.1, 0.1);
+            }
+            animal.x = clamp(animal.x + (animal.vx || 0) * dt, 0.1, 0.9);
+            animal.y = clamp(animal.y + (animal.vy || 0) * dt, 0.1, 0.9);
+          }
+
+          // Food generation
           const byType = {hase:0, kaninchen:0, huhn:0};
           for (const animal of building.animals) {
             byType[animal.type] = (byType[animal.type] || 0) + 1;
           }
-          
-          // Generate food if 2+ of same type
           for (const type of ['hase', 'kaninchen', 'huhn']) {
             if (byType[type] >= 2) {
-              building.foodGen += dt * 0.03; // Slow food generation
+              building.foodGen += dt * 0.008; // Adjust for 2 min
               if (building.foodGen >= 1) {
                 building.foodGen = 0;
                 state.base.food += 1;
@@ -645,21 +703,39 @@
         const z = state.zombies[i];
         const zombieTile = worldToTile(z.x, z.y);
         
-        // Check if zombie is trying to enter owned territory - stop them at the fence
+        // Check if zombie is trying to enter owned territory - push to nearest unowned tile more than 2 tiles from player
         if (isWithinOwnedTiles(z.x, z.y)) {
-          // Push zombie back outside the fence
           const zombieTile = worldToTile(z.x, z.y);
-          const playerTile = worldToTile(p.x, p.y);
-          const dx = zombieTile.ix - playerTile.ix;
-          const dy = zombieTile.iy - playerTile.iy;
-          
-          // Push zombie back to the edge of owned territory
-          if (Math.abs(dx) > Math.abs(dy)) {
-            z.x = (playerTile.ix + Math.sign(dx)) * TILE_SIZE + (dx > 0 ? 0 : TILE_SIZE);
-          } else {
-            z.y = (playerTile.iy + Math.sign(dy)) * TILE_SIZE + (dy > 0 ? 0 : TILE_SIZE);
+          let nearestUnowned = null;
+          let minDist = Infinity;
+          for (let dx = -5; dx <= 5; dx++) {
+            for (let dy = -5; dy <= 5; dy++) {
+              if (dx === 0 && dy === 0) continue;
+              const ix = zombieTile.ix + dx;
+              const iy = zombieTile.iy + dy;
+              const k = keyFor(ix, iy);
+              if (!state.ownedSet.has(k)) {
+                const distToPlayer = Math.max(Math.abs(ix - playerTile.ix), Math.abs(iy - playerTile.iy));
+                if (distToPlayer > 2) {
+                  const dist = Math.abs(dx) + Math.abs(dy);
+                  if (dist < minDist) {
+                    minDist = dist;
+                    nearestUnowned = {ix, iy};
+                  }
+                }
+              }
+            }
           }
-          continue;
+          if (nearestUnowned) {
+            const org = tileOrigin(nearestUnowned.ix, nearestUnowned.iy);
+            z.x = org.x + rand(50, TILE_SIZE - 50);
+            z.y = org.y + rand(50, TILE_SIZE - 50);
+          } else {
+            // If no unowned nearby, remove zombie
+            state.zombies.splice(i, 1);
+            i--;
+            continue;
+          }
         }
         
         // Check if zombie is within 2 tiles of player
@@ -676,7 +752,7 @@
               endGame("Vom Zombie getötet!");
               return;
             }
-            state.player.hp = Math.max(1, state.player.hp);
+            state.player.hp = Math.max(1, Math.min(state.player.hp, state.player.maxHP));
           }
         }
         
@@ -709,9 +785,10 @@
             // level up thresholds
             const nextLevel = 1 + Math.floor(state.xp / 30);
             if (nextLevel !== state.level)
-            { 
+            {
               state.level = nextLevel;
-              state.hp = 100;
+              state.player.maxHP = calculateMaxHP(state.level);
+              state.player.hp = state.player.maxHP;
             }
             updateHUD();
           }
@@ -826,6 +903,11 @@
                 ctx.fill();
               } else if (resource.type === 'wood') {
                 ctx.fillStyle = "#8b5a2b";
+                ctx.beginPath();
+                ctx.arc(rx, ry, 8, 0, Math.PI*2);
+                ctx.fill();
+              } else if (resource.type === 'straw') {
+                ctx.fillStyle = resource.respawnTimer > 0 ? "#8b4513" : "#ffff00";
                 ctx.beginPath();
                 ctx.arc(rx, ry, 8, 0, Math.PI*2);
                 ctx.fill();
@@ -977,8 +1059,19 @@
         a.vx = rand(-25, 25);
         a.vy = rand(-25, 25);
       }
-      a.x += (a.vx || 0) * dt;
-      a.y += (a.vy || 0) * dt;
+      const newX = a.x + (a.vx || 0) * dt;
+      const newY = a.y + (a.vy || 0) * dt;
+
+      // Prevent entering owned tiles by checking new position first
+      if (!isWithinOwnedTiles(newX, newY)) {
+        a.x = newX;
+        a.y = newY;
+      } else {
+        // Reverse velocity to bounce away
+        a.wander = 0.2;
+        a.vx = -a.vx;
+        a.vy = -a.vy;
+      }
     }
   }
 
