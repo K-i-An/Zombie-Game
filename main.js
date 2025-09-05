@@ -111,7 +111,8 @@
       breedTimers: { hase: 0, kaninchen: 0, huhn: 0 }
     },
     collectedPeople: [], // [{ x, y, r, wander, vx, vy }]
-    assignCooldown: 0
+    assignCooldown: 0,
+    buildingCooldown: 0
   };
 
   function createPen(){ return { exists:false, assignedByType:{hase:0,kaninchen:0,huhn:0}, list:[], breedTimers:{hase:0,kaninchen:0,huhn:0}, strawTimer: 0 }; }
@@ -451,8 +452,8 @@
     }
     
     // Build animal building with V key
-    if (tile.owned && keys.has("v")) {
-      const buildingCost = {stone: 2, clay: 2, wood: 4};
+    if (tile.owned && keys.has("v") && state.buildingCooldown <= 0) {
+      const buildingCost = {wood: 10};
       if (canAfford(buildingCost)) {
         const w = 80, h = 80;
         const x = rand(40, TILE_SIZE-w-40), y = rand(40, TILE_SIZE-h-40);
@@ -478,6 +479,7 @@
         if (!collision) {
           payCost(buildingCost);
           tile.buildings.push({x, y, w, h, cans: [], type: 'animal_house', animals: [], foodGen: 0});
+          state.buildingCooldown = 0.3;
           updateHUD();
         }
       }
@@ -489,6 +491,9 @@
       assignOneDomesticatedToPen(tile.pen);
       state.assignCooldown = 0.3;
     }
+
+    // Decrement building cooldown
+    state.buildingCooldown = Math.max(0, state.buildingCooldown - dt);
 
     // Capture wild animals to domesticate
     if(keys.has("f")){
