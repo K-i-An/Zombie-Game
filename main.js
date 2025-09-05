@@ -104,6 +104,7 @@
     dayDuration: 64800, // 18 hours in seconds
     nightDuration: 21600, // 6 hours in seconds
     currentTimeOfDay: 0, // current time in cycle (0-86399)
+    daysPassed: 0, // total days elapsed since game start
     domesticated: {
       list: [], // [{ type, x, y, r, wander }]
       byType: { hase: 0, kaninchen: 0, huhn: 0 },
@@ -228,6 +229,7 @@
     state.level = 1;
     state.spawnTimer = 0;
     state.elapsed = 0;
+    state.daysPassed = 0;
     state.grace = 3; // seconds of protection
     // take value from select (seconds)
     state.zombieFreeUntil = Number(zfreeSelect?.value || 600);
@@ -354,9 +356,11 @@
 
     // Update occupied buildings counter and time display
     state.occupiedBuildings = countOccupiedBuildings();
-    const currentHour = Math.floor(state.currentTimeOfDay / 3600);
-    const timeString = `${currentHour.toString().padStart(2, '0')}:00 ${state.isDay ? 'Tag' : 'Nacht'}`;
-    hudTiles.textContent = `Gebiete: ${state.ownedSet.size} · Gebäude: ${state.occupiedBuildings} · ${timeString}`;
+    const totalHours = Math.floor(state.elapsed / 3600);
+    const totalMinutes = Math.floor((state.elapsed % 3600) / 60);
+    const timeString = `${totalHours.toString().padStart(2, '0')}:${totalMinutes.toString().padStart(2, '0')}`;
+    const dayString = `Tag ${state.daysPassed + 1}`;
+    hudTiles.textContent = `Gebiete: ${state.ownedSet.size} · Gebäude: ${state.occupiedBuildings} · ${dayString}, ${timeString}`;
   }
 
   // Loop helpers
@@ -437,9 +441,11 @@
     if (tile.owned && !tile.pen.exists) {
       const cost = getPenCost();
       // show build hint in HUD bar with time
-      const currentHour = Math.floor(state.currentTimeOfDay / 3600);
-      const timeString = `${currentHour.toString().padStart(2, '0')}:00 ${state.isDay ? 'Tag' : 'Nacht'}`;
-      hudTiles.textContent = `Gebiete: ${state.ownedSet.size} · B: Stall bauen (H${cost.wood}) · ${timeString}`;
+      const totalHours = Math.floor(state.elapsed / 3600);
+      const totalMinutes = Math.floor((state.elapsed % 3600) / 60);
+      const timeString = `${totalHours.toString().padStart(2, '0')}:${totalMinutes.toString().padStart(2, '0')}`;
+      const dayString = `Tag ${state.daysPassed + 1}`;
+      hudTiles.textContent = `Gebiete: ${state.ownedSet.size} · B: Stall bauen (H${cost.wood}) · ${dayString}, ${timeString}`;
       if (keys.has("b") && canAfford(cost)) { payCost(cost); tile.pen.exists = true; updateHUD(); }
     }
     
@@ -1234,6 +1240,9 @@
   function updateDayNightCycle(dt) {
     // Update current time in cycle
     state.currentTimeOfDay = (state.elapsed % state.dayLength);
+
+    // Update total days passed
+    state.daysPassed = Math.floor(state.elapsed / state.dayLength);
 
     // Determine if it's day or night
     // Day: 0 to dayDuration (18 hours)
