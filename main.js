@@ -436,8 +436,10 @@
     const tile = ensureTile(pt.ix, pt.iy);
     if (tile.owned && !tile.pen.exists) {
       const cost = getPenCost();
-      // show build hint in HUD bar
-      hudTiles.textContent = `Gebiete: ${state.ownedSet.size} · B: Stall bauen (H${cost.wood})`;
+      // show build hint in HUD bar with time
+      const currentHour = Math.floor(state.currentTimeOfDay / 3600);
+      const timeString = `${currentHour.toString().padStart(2, '0')}:00 ${state.isDay ? 'Tag' : 'Nacht'}`;
+      hudTiles.textContent = `Gebiete: ${state.ownedSet.size} · B: Stall bauen (H${cost.wood}) · ${timeString}`;
       if (keys.has("b") && canAfford(cost)) { payCost(cost); tile.pen.exists = true; updateHUD(); }
     }
     
